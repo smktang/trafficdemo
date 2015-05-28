@@ -9,38 +9,40 @@ case object Statistics {
 
 class Statistics(expectedNumberOfConnections: Int) extends Actor with ActorLogging {
   private var connections = 0
-  private var connectionEvents = 0
   private var connectionFailures = 0
-  private var connectionsTime = -1.0
   private var writeFailures = 0
   private var startTime = System.currentTimeMillis()
   private var lostResponses = 0
+  private var outstandingRequests = 0
+  private var totalRequests = 0
 
   override def receive: Receive = {
     case WriteLog =>
-      val logMessage = s"Session Log: |Connections established: ${connections} in ${connectionsTime}ms| Connections failed: ${connectionFailures} |Write failures: ${writeFailures} |Lost responses: ${lostResponses}"
+      val logMessage = s"Session Log: |Active Conn: ${connections}| Failed Conn: ${connectionFailures} |Write failures: ${writeFailures} |Total req: ${totalRequests} |OReq: $outstandingRequests}"
       log.info(logMessage)
 
     case Reset =>
       // reset
       connections = 0
-      connectionEvents = 0
       connectionFailures = 0
-      connectionsTime = -1.0
       writeFailures = 0
       startTime = System.currentTimeMillis()
       lostResponses = 0
 
+    case AddOutstandingRequest =>
+      outstandingRequests += 1
+      totalRequests += 1
+
+    case RemoveOutstandingRequest =>
+      outstandingRequests -= 1
+
     case RegisterConnection =>
-      connectionEvents = connectionEvents + 1
-      connections = connections + 1
-      if (connectionEvents == expectedNumberOfConnections) {
-        connectionsTime = System.currentTimeMillis() - startTime
-      }
+      connections += 1
+    case UnRegisterConnection =>
+      connections -= 1
 
     case RegisterConnectionFailure =>
-      connectionEvents = connectionEvents + 1
-      connectionFailures = connectionFailures + 1
+      connectionFailures += 1
 
     case ReportLostResponses(numberOfLostResponses) =>
       lostResponses = lostResponses + numberOfLostResponses
@@ -50,8 +52,13 @@ class Statistics(expectedNumberOfConnections: Int) extends Actor with ActorLoggi
   }
 }
 
+case object AddOutstandingRequest
+
+case object RemoveOutstandingRequest
 
 case object RegisterConnection
+
+case object UnRegisterConnection
 
 case object RegisterConnectionFailure
 

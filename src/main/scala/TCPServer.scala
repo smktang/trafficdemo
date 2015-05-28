@@ -67,7 +67,7 @@ class TCPServer extends Actor with ActorLogging {
       val elapsed = (System.currentTimeMillis() - thresholdStartTime) / 1000f
       val rate: Float = currentThreshold.toFloat / elapsed.toFloat
 
-      log.info(s"active connections: ${activeConnections}  | processed requests: ${currentThreshold} | ${elapsed}s | ${rate} req/sec")
+      log.info(s"active connections: ${activeConnections}  | processed requests: ${totalProcessedRequests} | ${elapsed}s | ${rate} req/sec")
       currentThreshold = 0
       thresholdStartTime = System.currentTimeMillis()
   }
@@ -86,6 +86,11 @@ class TCPHandler extends Actor with ActorLogging {
     case PeerClosed =>
       context.parent ! ClosedConnection
       context stop self
+    case x : ErrorClosed =>
+      context.parent ! ClosedConnection
+      context stop self
+    case x =>
+      log.info("Unhandled {}", x)
   }
 }
 

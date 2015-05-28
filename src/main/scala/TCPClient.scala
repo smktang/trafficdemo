@@ -1,4 +1,5 @@
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 
 import akka.actor._
 import akka.io.Tcp._
@@ -7,6 +8,7 @@ import akka.routing.{ActorRefRoutee, RoundRobinRoutingLogic, Router}
 import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -45,6 +47,11 @@ class TCPClientManager(remoteAddr: InetSocketAddress, numClients: Int) extends A
 
   val statistics = context.actorOf(Statistics.props(numClients))
 
+  context.system.scheduler.schedule(0 milliseconds,
+    3 seconds,
+    statistics,
+    WriteLog)
+
   val router = Router(RoundRobinRoutingLogic(), Vector.fill(numClients) {
     val r = context.actorOf(Props(classOf[TCPClient], remoteAddr, numClients, statistics))
     context watch r
@@ -56,7 +63,7 @@ class TCPClientManager(remoteAddr: InetSocketAddress, numClients: Int) extends A
       log.info("Session starting")
       statistics ! Reset
       router.routees.foreach(_.send(InitConnection, self))
-      context.system.scheduler.scheduleOnce(SessionConfig.SESSION_DURATION, self, EndSession)
+//      context.system.scheduler.scheduleOnce(SessionConfig.SESSION_DURATION, self, EndSession)
 
     case EndSession =>
       log.info("Session ending")
@@ -76,9 +83,51 @@ class TCPClientManager(remoteAddr: InetSocketAddress, numClients: Int) extends A
 class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: ActorRef) extends Actor with ActorLogging {
   import context.system
   import context.dispatcher
+  import scala.collection.{mutable => m}
 
   private var requestResponseBalance = 0
+  private var counter : Long = 0
+  private val latencyMap: m.HashMap[Long, Long] = new m.HashMap[Long, Long]()
+  private val buffer: ByteBuffer = ByteBuffer.allocate(8)
+  private var bufferCount = 0
 
+  def processData(data : ByteString) : Unit = {
+    def process(req : Long) = {
+      val latency = java.lang.System.currentTimeMillis() - latencyMap.getOrElse(req, 0l)
+      latencyMap.remove(req)
+      statistics ! RemoveOutstandingRequest
+    }
+
+    var toProcess = data
+    if (bufferCount > 0){
+      //buffer has stuff, try to fill up to 8
+      val firstReply = data.slice(0, 8-bufferCount)
+      buffer.put(firstReply.toArray, bufferCount, firstReply.size)
+      bufferCount += firstReply.size
+      if (bufferCount == 8){
+        //have full packet
+        process(buffer.getLong())
+        //set toProcess to be the slice to be processed
+        toProcess = data.slice(firstReply.size, data.size)
+        //clear the buffer
+        bufferCount = 0
+      } else {
+        return
+      }
+    }
+
+    //bufferCount should be 0 if got here
+    val groupedReplies = toProcess.grouped(8)
+    groupedReplies.foreach(group => {
+      if (group.size == 8){
+        process(group.asByteBuffer.getLong())
+      } else {
+        //this should be the last loop, but size < 8, means partial packet
+        //store
+        bufferCount = group.copyToBuffer(buffer)
+      }
+    })
+  }
   def receive = {
     case InitConnection =>
       IO(Tcp) ! Connect(remoteAddr)
@@ -97,20 +146,33 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
       val tickScheduler = context.system.scheduler.schedule(0 seconds, 1 second, self, Tick)
 
       context become {
-        case data: ByteString =>
-          connection ! Write(data)
         case Tick =>
-          connection ! Write(ByteString("echo"))
-          requestResponseBalance = requestResponseBalance + 1
+          connection ! Write(ByteString(java.nio.ByteBuffer.allocate(8).putLong(counter).array()))
+          latencyMap.put(counter, java.lang.System.currentTimeMillis())
+          counter += 1
+          statistics ! AddOutstandingRequest
         case CommandFailed(w: Write) =>
           statistics ! RegisterWriteFailure
         case Received(data) =>
-          requestResponseBalance = requestResponseBalance - 1
+          processData(data)
         case CloseConnection =>
+          log.info("Closing...Missing replies: {}", latencyMap.size)
+          statistics ! UnRegisterConnection
           connection ! Close
           tickScheduler.cancel()
-          if (requestResponseBalance > 1) statistics ! ReportLostResponses(requestResponseBalance)
           context.unbecome()
+          //reconnect
+          self ! InitConnection
+        case x : ErrorClosed =>
+          log.info("Closing...Missing replies: {}", latencyMap.size)
+          statistics ! UnRegisterConnection
+          connection ! Close
+          tickScheduler.cancel()
+          context.unbecome()
+          //reconnect
+          self ! InitConnection
+        case x =>
+          log.error("Unhandled: {}", x)
       }
   }
 }
