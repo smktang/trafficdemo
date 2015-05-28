@@ -29,42 +29,42 @@ class Statistics(expectedNumberOfConnections: Int) extends Actor with ActorLoggi
       startTime = System.currentTimeMillis()
       lostResponses = 0
 
-    case AddOutstandingRequest =>
-      outstandingRequests += 1
-      totalRequests += 1
+    case AddOutstandingRequest(count) =>
+      outstandingRequests += count
+      totalRequests += count
 
-    case RemoveOutstandingRequest =>
-      outstandingRequests -= 1
+    case RemoveOutstandingRequest(count) =>
+      outstandingRequests -= count
 
-    case RegisterConnection =>
-      connections += 1
-    case UnRegisterConnection =>
-      connections -= 1
+    case RegisterConnection(count) =>
+      connections += count
+    case UnRegisterConnection(count) =>
+      connections -= count
 
-    case RegisterConnectionFailure =>
-      connectionFailures += 1
+    case RegisterConnectionFailure(count) =>
+      connectionFailures += count
 
-    case ReportLostResponses(numberOfLostResponses) =>
-      lostResponses = lostResponses + numberOfLostResponses
+    case ReportLostResponses(count) =>
+      lostResponses += count
 
-    case RegisterWriteFailure =>
-      writeFailures = writeFailures + 1
+    case RegisterWriteFailure(count) =>
+      writeFailures += count
   }
 }
 
-case object AddOutstandingRequest
+case class AddOutstandingRequest(count : Int = 1)
 
-case object RemoveOutstandingRequest
+case class RemoveOutstandingRequest(count : Int = 1)
 
-case object RegisterConnection
+case class RegisterConnection(count : Int = 1)
 
-case object UnRegisterConnection
+case class UnRegisterConnection(count : Int = 1)
 
-case object RegisterConnectionFailure
+case class RegisterConnectionFailure(count : Int = 1)
 
-case object RegisterWriteFailure
+case class RegisterWriteFailure(count : Int = 1)
 
-case class ReportLostResponses(numberOfLostResponses: Int)
+case class ReportLostResponses(count : Int = 1)
 
 case object WriteLog
 

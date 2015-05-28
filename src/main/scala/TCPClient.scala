@@ -95,7 +95,7 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
     def process(req : Long) = {
       val latency = java.lang.System.currentTimeMillis() - latencyMap.getOrElse(req, 0l)
       latencyMap.remove(req)
-      statistics ! RemoveOutstandingRequest
+      statistics ! RemoveOutstandingRequest(1)
     }
 
     var toProcess = data
@@ -128,49 +128,65 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
       }
     })
   }
+
   def receive = {
+
     case InitConnection =>
       IO(Tcp) ! Connect(remoteAddr)
       log.debug("Connection initialized")
 
     case CommandFailed(_: Connect) =>
-      statistics ! RegisterConnectionFailure
+      statistics ! RegisterConnectionFailure(1)
       context.system.scheduler.scheduleOnce(3 seconds, self, InitConnection)
 
     case c@Connected(remote, local) =>
       val connection = sender()
       connection ! Register(self)
-      statistics ! RegisterConnection
+      statistics ! RegisterConnection(1)
 
       requestResponseBalance = 0
       val tickScheduler = context.system.scheduler.schedule(0 seconds, 1 second, self, Tick)
+
+      def cleanupClose() = {
+        statistics ! RemoveOutstandingRequest(latencyMap.size)
+        statistics ! RegisterWriteFailure(latencyMap.size)
+        latencyMap.clear()
+        statistics ! UnRegisterConnection(1)
+        connection ! Close
+        tickScheduler.cancel()
+        context.unbecome()
+        //reconnect
+        self ! InitConnection
+      }
 
       context become {
         case Tick =>
           connection ! Write(ByteString(java.nio.ByteBuffer.allocate(8).putLong(counter).array()))
           latencyMap.put(counter, java.lang.System.currentTimeMillis())
           counter += 1
-          statistics ! AddOutstandingRequest
+          statistics ! AddOutstandingRequest(1)
         case CommandFailed(w: Write) =>
-          statistics ! RegisterWriteFailure
+          statistics ! RegisterWriteFailure(1)
         case Received(data) =>
           processData(data)
-        case CloseConnection =>
-          log.info("Closing...Missing replies: {}", latencyMap.size)
-          statistics ! UnRegisterConnection
-          connection ! Close
-          tickScheduler.cancel()
-          context.unbecome()
-          //reconnect
-          self ! InitConnection
+        case CloseConnection | PeerClosed =>
+//          log.info("Closing...Missing replies: {}", latencyMap.size)
+          cleanupClose()
+//          statistics ! UnRegisterConnection
+//          connection ! Close
+//          tickScheduler.cancel()
+//          context.unbecome()
+//          //reconnect
+//          self ! InitConnection
         case x : ErrorClosed =>
-          log.info("Closing...Missing replies: {}", latencyMap.size)
-          statistics ! UnRegisterConnection
-          connection ! Close
-          tickScheduler.cancel()
-          context.unbecome()
-          //reconnect
-          self ! InitConnection
+  //        log.info("Closing...Missing replies: {}", latencyMap.size)
+          cleanupClose()
+//          statistics ! UnRegisterConnection
+//          connection ! Close
+//          tickScheduler.cancel()
+//          context.unbecome()
+//          //reconnect
+//          self ! InitConnection
         case x =>
           log.error("Unhandled: {}", x)
       }
