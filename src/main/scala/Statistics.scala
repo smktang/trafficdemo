@@ -18,7 +18,7 @@ class Statistics(expectedNumberOfConnections: Int) extends Actor with ActorLoggi
 
   override def receive: Receive = {
     case WriteLog =>
-      val logMessage = s"Session Log: |Active Conn: ${connections}| Failed Conn: ${connectionFailures} |Write failures: ${writeFailures} |Total req: ${totalRequests} |OReq: $outstandingRequests}"
+      val logMessage = s"Session Log: |Active Conn: ${connections}| Failed Conn: ${connectionFailures} |Write failures: ${writeFailures} |Total req: ${totalRequests} |OReq: $outstandingRequests"
       log.info(logMessage)
 
     case Reset =>
