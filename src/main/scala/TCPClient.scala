@@ -25,7 +25,7 @@ akka {
 """)
   val host = if (args.size > 0) args(0) else "localhost"
   val port = if (args.size > 1) Integer.parseInt(args(1)) else 4200
-  val numClients = if (args.size > 2) Integer.parseInt(args(2)) else 100
+  val numClients = if (args.size > 2) Integer.parseInt(args(2)) else 40000
   val clientManager: ActorRef = ActorSystem("test", ConfigFactory.load(customConf))
     .actorOf(Props(classOf[TCPClientManager], new InetSocketAddress(host, port), numClients))
   clientManager ! StartSession
@@ -89,7 +89,6 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
   private var counter : Long = 0
   private val latencyMap: m.HashMap[Long, Long] = new m.HashMap[Long, Long]()
   private val buffer: ByteBuffer = ByteBuffer.allocate(8)
-  private var bufferCount = 0
 
   def processData(data : ByteString) : Unit = {
     def process(req : Long) = {
@@ -99,18 +98,17 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
     }
 
     var toProcess = data
-    if (bufferCount > 0){
+    if (buffer.position() > 0){
       //buffer has stuff, try to fill up to 8
-      val firstReply = data.slice(0, 8-bufferCount)
-      buffer.put(firstReply.toArray, bufferCount, firstReply.size)
-      bufferCount += firstReply.size
-      if (bufferCount == 8){
+      val firstReply = data.slice(0, 8-buffer.position())
+      buffer.put(firstReply.toArray)
+      if (buffer.position() == 8){
         //have full packet
-        process(buffer.getLong())
+        process(buffer.getLong(0))
         //set toProcess to be the slice to be processed
         toProcess = data.slice(firstReply.size, data.size)
         //clear the buffer
-        bufferCount = 0
+        buffer.clear()
       } else {
         return
       }
@@ -120,11 +118,11 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
     val groupedReplies = toProcess.grouped(8)
     groupedReplies.foreach(group => {
       if (group.size == 8){
-        process(group.asByteBuffer.getLong())
+        process(group.asByteBuffer.getLong)
       } else {
         //this should be the last loop, but size < 8, means partial packet
         //store
-        bufferCount = group.copyToBuffer(buffer)
+        group.copyToBuffer(buffer)
       }
     })
   }

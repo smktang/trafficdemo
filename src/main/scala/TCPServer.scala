@@ -11,7 +11,7 @@ object TCPServerApp extends App {
     val customConf = ConfigFactory.parseString("""
 akka {
    loggers = ["akka.event.slf4j.Slf4jLogger"]
-   log-dead-letters = off
+   log-dead-letters = on
    loglevel = DEBUG
 }""")
 
@@ -70,6 +70,9 @@ class TCPServer extends Actor with ActorLogging {
       log.info(s"active connections: ${activeConnections}  | processed requests: ${totalProcessedRequests} | ${elapsed}s | ${rate} req/sec")
       currentThreshold = 0
       thresholdStartTime = System.currentTimeMillis()
+
+    case x =>
+      log.info("Unhandled {}", x)
   }
 
 }
@@ -83,12 +86,12 @@ class TCPHandler extends Actor with ActorLogging {
       // For now, echo back to the client
       sender() ! Write(data)
       context.parent ! Processed
-    case PeerClosed =>
+//    case PeerClosed =>
+//      context.parent ! ClosedConnection
+//      //context stop self
+    case x : ConnectionClosed  =>
       context.parent ! ClosedConnection
-      context stop self
-    case x : ErrorClosed =>
-      context.parent ! ClosedConnection
-      context stop self
+      //context stop self
     case x =>
       log.info("Unhandled {}", x)
   }
