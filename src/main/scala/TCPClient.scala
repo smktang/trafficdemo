@@ -87,14 +87,14 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
 
   private var requestResponseBalance = 0
   private var counter : Long = 0
-  private val latencyMap: m.HashMap[Long, Long] = new m.HashMap[Long, Long]()
+//  private val latencyMap: m.HashMap[Long, Long] = new m.HashMap[Long, Long]()
   private val buffer: ByteBuffer = ByteBuffer.allocate(8)
 
   def processData(data : ByteString) : Unit = {
     def process(req : Long) = {
-      val latency = java.lang.System.currentTimeMillis() - latencyMap.getOrElse(req, 0l)
-      latencyMap.remove(req)
-      statistics ! RemoveOutstandingRequest(1)
+//      val latency = java.lang.System.currentTimeMillis() - latencyMap.getOrElse(req, 0l)
+//      latencyMap.remove(req)
+//      statistics ! RemoveOutstandingRequest(1)
     }
 
     var toProcess = data
@@ -146,9 +146,9 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
       val tickScheduler = context.system.scheduler.schedule(0 seconds, 1 second, self, Tick)
 
       def cleanupClose() = {
-        statistics ! RemoveOutstandingRequest(latencyMap.size)
-        statistics ! RegisterWriteFailure(latencyMap.size)
-        latencyMap.clear()
+//        statistics ! RemoveOutstandingRequest(latencyMap.size)
+//        statistics ! RegisterWriteFailure(latencyMap.size)
+//        latencyMap.clear()
         statistics ! UnRegisterConnection(1)
         connection ! Close
         tickScheduler.cancel()
@@ -160,9 +160,9 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
       context become {
         case Tick =>
           connection ! Write(ByteString(java.nio.ByteBuffer.allocate(8).putLong(counter).array()))
-          latencyMap.put(counter, java.lang.System.currentTimeMillis())
+//          latencyMap.put(counter, java.lang.System.currentTimeMillis())
           counter += 1
-          statistics ! AddOutstandingRequest(1)
+//          statistics ! AddOutstandingRequest(1)
         case CommandFailed(w: Write) =>
           log.error("Write Error: {}", w)
           statistics ! RegisterWriteFailure(1)
