@@ -166,6 +166,7 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
         case CommandFailed(w: Write) =>
           log.error("Write Error: {}", w)
           statistics ! RegisterWriteFailure(1)
+          cleanupClose()
         case Received(data) =>
           processData(data)
         case CloseConnection | PeerClosed =>
