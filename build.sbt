@@ -12,5 +12,3 @@ libraryDependencies := Seq(
 import com.github.retronym.SbtOneJar._
 
 oneJarSettings
-
-mainClass in oneJar := Some("TCPServerApp")
