@@ -9,3 +9,8 @@ libraryDependencies := Seq(
   "com.typesafe.akka" %% "akka-slf4j" % "2.3.11",
   "ch.qos.logback" % "logback-classic" % "1.0.13")
 
+import com.github.retronym.SbtOneJar._
+
+oneJarSettings
+
+mainClass in oneJar := Some("TCPServerApp")

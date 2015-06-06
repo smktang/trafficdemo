@@ -164,6 +164,7 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
           counter += 1
           statistics ! AddOutstandingRequest(1)
         case CommandFailed(w: Write) =>
+          log.error("Write Error: {}", w)
           statistics ! RegisterWriteFailure(1)
         case Received(data) =>
           processData(data)
