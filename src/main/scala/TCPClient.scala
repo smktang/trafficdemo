@@ -169,8 +169,8 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
           cleanupClose()
         case Received(data) =>
           processData(data)
-        case CloseConnection | PeerClosed =>
-//          log.info("Closing...Missing replies: {}", latencyMap.size)
+        case x@(CloseConnection | PeerClosed) =>
+          log.info("Closing: {}", x)
           cleanupClose()
 //          statistics ! UnRegisterConnection
 //          connection ! Close
@@ -179,7 +179,7 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
 //          //reconnect
 //          self ! InitConnection
         case x : ErrorClosed =>
-  //        log.info("Closing...Missing replies: {}", latencyMap.size)
+          log.info("ErrorClose: {}", x)
           cleanupClose()
 //          statistics ! UnRegisterConnection
 //          connection ! Close
