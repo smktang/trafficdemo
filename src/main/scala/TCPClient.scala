@@ -134,7 +134,7 @@ class TCPClient(remoteAddr: InetSocketAddress, numClients: Int, statistics: Acto
       log.debug("Connection initialized")
 
     case x@CommandFailed(_: Connect) =>
-      log.debug("Command Failed: {}", x)
+      log.info("Command Failed: {}", x)
       statistics ! RegisterConnectionFailure(1)
       context.system.scheduler.scheduleOnce(3 seconds, self, InitConnection)
 
